@@ -1,35 +1,72 @@
-# This workflow will build a Java project with Maven, and cache/restore any dependencies to improve the workflow execution time
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-maven
+# GitHub Actions 워크플로우 이름
+name: Jib CI/CD (No Server Script)
 
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-name: Java CI with Maven
-
+# main 브랜치에 push 될 때만 실행
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
 
 jobs:
-  build:
-
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
+    # 1) GitHub 저장소 코드 체크아웃
     - uses: actions/checkout@v4
+
+    # 2) JDK 17 세팅 (Jib 빌드용)
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
         cache: maven
-    - name: Build with Maven
-      run: mvn -B package --file pom.xml
 
-    # Optional: Uploads the full dependency graph to GitHub to improve the quality of Dependabot alerts this repository can receive
-    - name: Update dependency graph
-      uses: advanced-security/maven-dependency-submission-action@571e99aab1055c2e71a1e2309b9691de18d6b7d6
+    # 3-1) Spring Boot / Java 프로젝트 컴파일 & 패키징
+    # - target/classes 생성
+    # - Jib이 사용할 빌드 결과물 준비
+    - name: Build project with Maven
+      run: mvn -B clean package
+
+    # 3-2) Jib으로 Docker 이미지 TAR 생성
+    # - Dockerfile ❌
+    # - 결과물: target/myapp.tar
+    - name: Build image tar with Jib
+      run: mvn -B jib:buildTar
+
+    # 4) 생성된 myapp.tar 파일을 서버로 전송 (SCP)
+    - name: Copy image tar to server
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        source: "target/myapp.tar"
+        target: "/home/ubuntu"
+
+    # 5) 서버에 SSH 접속해서 Docker 명령 실행 (스크립트 파일 없음)
+    - name: Run container on server (no script)
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        script: |
+          # TAR 파일을 Docker 이미지로 로드 (이미지 생성)
+          sudo docker load < /home/ubuntu/target/myapp.tar
+
+          # 기존 컨테이너 중지 (없어도 에러 무시)
+          sudo docker stop myapp || true
+
+          # 기존 컨테이너 삭제 (없어도 에러 무시)
+          sudo docker rm myapp || true
+
+          # 새 컨테이너 실행
+          sudo docker run -d \
+            --name myapp \
+            -p 8080:8080 \
+            --restart unless-stopped \
+            myapp
+
+          # 사용하지 않는 이전 이미지 정리
+          sudo docker image prune -f
