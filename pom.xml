@@ -55,17 +55,18 @@
 					</to>
 					
 			<!-- 추가된 코드-->
-			<container>
-				<ports>
-					<port>8080</port>
-				</ports>
-				<creationTime>USE_CURRENT_TIMESTAMP</creationTime>
-			</container>
-
-			<outputPaths>
-				<tar>target/myapp.tar</tar>
-			</outputPaths>
+				<container>
+					<ports>
+						<port>8080</port>
+					</ports>
+					<creationTime>USE_CURRENT_TIMESTAMP</creationTime>
+				</container>
+	
+				<outputPaths>
+					<tar>target/myapp.tar</tar>
+				</outputPaths>
             <!-- 여기까지가 추가된 코드 -->
+            
 				</configuration>
 			</plugin>
 			
